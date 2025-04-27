@@ -1,0 +1,18 @@
+# .env file
+GOOGLE_API_KEY=YOUR_GOOGLE_API_KEY
+ELEVENLABS_API_KEY=YOUR_ELEVENLABS_KEY
+
+
+# --- Service Selection ---
+# Choose the Text-to-Speech provider: 'elevenlabs' or 'google'
+TTS_PROVIDER="elevenlabs"
+
+# --- Google Cloud Specific (Only needed if TTS_PROVIDER='google') ---
+# Set this environment variable system-wide OR uncomment and set the path here
+# GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/google_cloud_credentials.json"
+
+# --- Optional: Default Fallback Voice ID ---
+# Provide a voice ID known to work for the *default* TTS_PROVIDER
+# For ElevenLabs: e.g., "JBFqnCBsd6RMkjVDRZzb" (Rachel)
+# For Google TTS: e.g., "en-US-Standard-A" (Female) or "en-US-Standard-B" (Male)
+DEFAULT_FALLBACK_VOICE_ID="JBFqnCBsd6RMkjVDRZzb"
