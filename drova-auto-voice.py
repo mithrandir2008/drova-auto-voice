@@ -105,43 +105,52 @@ def save_json_data(data: dict, filepath: str):
         print(f"An unexpected error occurred while saving to JSON: {e}")
 
 
-def compress_img(image):
-    # --- SNIPPET START ---
-    MAX_HEIGHT = 720
+from PIL import Image # Make sure PIL.Image is imported
+
+def resize_image(img: Image.Image, max_height: int = 720) -> Image.Image:
+    """
+    Resizes a PIL Image object to a maximum height, maintaining aspect ratio.
+
+    Args:
+        img: The input PIL Image object.
+        max_height: The target maximum height in pixels.
+
+    Returns:
+        The resized PIL Image object, or the original if resizing is not needed
+        or fails.
+    """
     orig_width, orig_height = img.size
 
-    if orig_height > MAX_HEIGHT:
-        print(f"Image height ({orig_height}px) exceeds target ({MAX_HEIGHT}px). Resizing...")
-        ratio = MAX_HEIGHT / orig_height
-        new_width = int(orig_width * ratio)
-        new_height = MAX_HEIGHT # This is fixed
-
+    if orig_height > max_height:
+        print(f"Original image size: {orig_width}x{orig_height}. Resizing to max height {max_height}px...")
         try:
-            # Use the modern Resampling enum if Pillow >= 9.1.0
-            # Older versions use Image.LANCZOS or Image.ANTIALIAS
-            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            print(f"Image resized to {new_width}x{new_height} pixels.")
-        except AttributeError:
-            # Fallback for older Pillow versions
-            try:
-                print("Using fallback resizing filter (ANTIALIAS) for older Pillow.")
-                img = img.resize((new_width, new_height), Image.ANTIALIAS) # ANTIALIAS is widely available
-                print(f"Image resized to {new_width}x{new_height} pixels.")
-            except Exception as resize_err:
-                print(f"Warning: Failed to resize image. Using original. Error: {resize_err}")
-        except Exception as resize_err:
-            print(f"Warning: Failed to resize image. Using original. Error: {resize_err}")
-    else:
-        print(f"Image height ({orig_height}px) is within target ({MAX_HEIGHT}px). No resize needed.")
+            # Calculate the new width to maintain aspect ratio
+            ratio = max_height / float(orig_height)
+            new_width = int(float(orig_width) * ratio)
+            new_height = max_height # Target height
 
-    # Now 'img' is either the original or the resized image object
-    # Proceed to send 'img' to Gemini API...
+            # Resize the image - LANCZOS is good for downscaling quality
+            # Use Resampling enum for Pillow >= 9.1.0
+            resample_filter = Image.Resampling.LANCZOS if hasattr(Image, 'Resampling') else Image.LANCZOS
+            resized_img = img.resize((new_width, new_height), resample_filter)
+            print(f"Image successfully resized to {new_width}x{new_height}.")
+            return resized_img # Return the new resized image
+
+        except Exception as e:
+            print(f"Warning: Failed to resize image. Using original. Error: {e}")
+            return img # Return original image on failure
+    else:
+        print(f"Image height ({orig_height}px) is within limit ({max_height}px). No resize needed.")
+        return img # Return original image if no resize needed
+    
 
 def get_info_from_screenshot(image_path: str) -> dict | None:
     """Uploads screenshot to Gemini, returns extracted JSON data."""
     print(f"\nProcessing image: {image_path}")
     try:
-        img = Image.open(image_path)
+        original_img = Image.open(image_path)
+        img_to_upload = resize_image(original_img, max_height=720) # Call the function
+
     except FileNotFoundError:
         print(f"Error: Image file not found at {image_path}")
         return None
@@ -152,7 +161,7 @@ def get_info_from_screenshot(image_path: str) -> dict | None:
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
         print("Sending request to Gemini API...")
-        response = model.generate_content([SYSTEM_PROMPT, img], request_options={"timeout": 120}) # Add timeout
+        response = model.generate_content([SYSTEM_PROMPT, img_to_upload], request_options={"timeout": 120}) # Add timeout
         response.resolve()
 
         # Check for safety blocks before accessing text
