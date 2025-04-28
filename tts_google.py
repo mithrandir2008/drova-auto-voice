@@ -75,9 +75,15 @@ def synthesize(text: str, voice_id: str, output_filename: str | None = None) -> 
             name=voice_id
         )
 
+        # --- Select the type of audio file format AND desired sample rate ---
+        target_sample_rate = 44100 # <-- SET YOUR DESIRED RATE HERE (e.g., 44100, 48000)
+        print(f"Requesting audio with sample rate: {target_sample_rate} Hz") # Optional: Log requested rate
+
+
         # Select the type of audio file format (MP3 or WAV/LINEAR16)
         audio_config = texttospeech.AudioConfig(
-            audio_encoding=getattr(texttospeech.AudioEncoding, config.GOOGLE_TTS_AUDIO_ENCODING)
+            audio_encoding=getattr(texttospeech.AudioEncoding, config.GOOGLE_TTS_AUDIO_ENCODING),
+            sample_rate_hertz=target_sample_rate
             # You could add pitch, speaking_rate here if desired
             # speaking_rate=1.0,
             # pitch=0.0

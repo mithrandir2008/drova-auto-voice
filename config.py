@@ -4,6 +4,11 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# --- Interactive Listener Settings ---
+TRIGGER_KEY = "`" # Tilde key (often above Tab)
+EXIT_KEY = "esc" # Escape key
+
+
 # --- Gemini Configuration ---
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
@@ -72,20 +77,72 @@ else:
 # --- Image Processing ---
 MAX_IMAGE_HEIGHT = 720
 
-# --- Gemini Prompt ---
+# # --- Gemini Prompt ---
+# SYSTEM_PROMPT = """
+# Analyze the character prominently featured in the screenshot provided.
+# Identify the character's name, gender (Male/Female/Unknown), and any dialogue they are speaking
+# (look for speech bubbles or text directly attributed to them). Use "Unknown" if the name or gender cannot be determined.
+
+# Return ONLY a valid JSON object with the following structure:
+# {
+#   "character_name": "<Character's Name or Unknown>",
+#   "gender": "<Male/Female/Unknown>",
+#   "dialogue": "<The character's exact spoken words as seen in the image, or an empty string if none>"
+# }
+
+# Do not include any explanatory text before or after the JSON object.
+# Ensure the 'dialogue' field contains only the text spoken by the character.
+# If no dialogue is clearly visible or attributable to the character, return an empty string for 'dialogue'.
+# """
+
+# --- Gemini Prompt with Google Chirp3-HD Pauses---
 SYSTEM_PROMPT = """
 Analyze the character prominently featured in the screenshot provided.
-Identify the character's name, gender (Male/Female/Unknown), and any dialogue they are speaking
-(look for speech bubbles or text directly attributed to them). Use "Unknown" if the name or gender cannot be determined.
+Identify the character's name and gender (Male/Female/Unknown).
+Extract the dialogue they are speaking (look for speech bubbles or text directly attributed to them).
+
+**Rewrite the extracted dialogue to sound more natural for text-to-speech, focusing on pacing and flow.**
+Use punctuation strategically:
+- Periods (.) for sentence endings and clear pauses.
+- Commas (,) for shorter pauses within sentences (e.g., separating clauses, list items).
+- Ellipses (...) for hesitations, trailing thoughts, or more significant pauses.
+- Hyphens (-) *occasionally* for abrupt breaks or slight pauses, if appropriate.
+- Aim for conversational phrasing where fitting. Break down long sentences if needed.
+- Do NOT just return the raw text. Enhance it with punctuation for better TTS delivery.
+- If no dialogue is visible, return an empty string for 'dialogue'.
 
 Return ONLY a valid JSON object with the following structure:
 {
   "character_name": "<Character's Name or Unknown>",
   "gender": "<Male/Female/Unknown>",
-  "dialogue": "<The character's exact spoken words as seen in the image, or an empty string if none>"
+  "dialogue": "<The REWRITTEN dialogue using punctuation for natural flow>"
 }
 
 Do not include any explanatory text before or after the JSON object.
-Ensure the 'dialogue' field contains only the text spoken by the character.
-If no dialogue is clearly visible or attributable to the character, return an empty string for 'dialogue'.
+Ensure the 'dialogue' field contains the rewritten plain text or an empty string.
 """
+
+# --- Gemini Prompt with SSML ---
+# SYSTEM_PROMPT = """
+# Analyze the character prominently featured in the screenshot provided.
+# Identify the character's name, gender (Male/Female/Unknown).
+# Analyze the dialogue they are speaking (look for speech bubbles or text directly attributed to them).
+
+# Format the dialogue using basic SSML (Speech Synthesis Markup Language) to improve naturalness for text-to-speech.
+# Specifically:
+# 1. Wrap the entire dialogue content within `<speak>` tags.
+# 2. Use `<break strength="medium"/>` where a comma or short natural pause would occur within a sentence.
+# 3. Use `<break strength="strong"/>` or `<break time="0.7s"/>` at the end of sentences or where a more significant pause is appropriate.
+# 4. Optionally, use `<emphasis level="moderate">word</emphasis>` for words that seem emphasized in the context.
+# 5. Do NOT overuse SSML tags. Aim for subtle improvements in flow.
+# 6. If no dialogue is visible, return an empty string for 'dialogue_ssml'.
+
+# Return ONLY a valid JSON object with the following structure:
+# {
+#   "character_name": "<Character's Name or Unknown>",
+#   "gender": "<Male/Female/Unknown>",
+#   "dialogue_ssml": "<speak>The character's dialogue with SSML tags, e.g., <break strength='medium'/> Let's go.</speak>"
+# }
+
+# Do not include any explanatory text before or after the JSON object. Ensure the 'dialogue_ssml' field contains valid XML/SSML within the `<speak>` tags or an empty string.
+# """

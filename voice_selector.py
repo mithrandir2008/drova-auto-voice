@@ -89,6 +89,7 @@ class VoiceSelector:
             if unassigned_primary:
                 # Simple assignment: pick the first available
                 # Could add randomness: random.shuffle(unassigned_primary)
+                random.shuffle(unassigned_primary)
                 chosen_voice_info = unassigned_primary[0]
                 assigned_id = chosen_voice_info.get('id')
                 print(f"Assigned new {gender if gender != 'Unknown' else primary_pool_key} voice: {chosen_voice_info.get('name', 'N/A')} ({assigned_id})")
@@ -103,7 +104,7 @@ class VoiceSelector:
                      v for v in secondary_pool if v.get('id') and v.get('id') not in self.assigned_voice_ids
                  ]
                  if unassigned_secondary:
-                     # random.shuffle(unassigned_secondary)
+                     random.shuffle(unassigned_secondary)
                      chosen_voice_info = unassigned_secondary[0]
                      assigned_id = chosen_voice_info.get('id')
                      print(f"Assigned new secondary pool voice: {chosen_voice_info.get('name', 'N/A')} ({assigned_id})")

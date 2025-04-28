@@ -5,4 +5,6 @@ Pillow
 google-cloud-texttospeech # Only strictly needed if using Google TTS
 sounddevice # Optional: for playing Google TTS audio directly
 soundfile   # Optional: dependency for sounddevice to handle WAV/MP3 etc.
+keyboard    # <-- ADD THIS LINE
+
 # Add other dependencies if needed
