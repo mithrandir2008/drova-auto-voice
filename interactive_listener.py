@@ -37,15 +37,27 @@ request_exit = False
 is_processing = False
 
 # --- Core Processing Function ---
-def run_analysis_pipeline(image_path: str, voice_selector_instance: voice_selector.VoiceSelector):
+def run_analysis_pipeline(image_path: str, voice_selector_instance: voice_selector.VoiceSelector, trigger_time: float): # Add trigger_time
     """
     Runs the analysis and synthesis pipeline for a given image path.
     Uses the globally imported synthesize_speech function.
+    Prints timing information for each major step.
     """
     global is_processing
+    pipeline_start_time = time.perf_counter() # Start timing the pipeline itself
+
     print("-" * 30)
 
+    # --- 1. Gemini Analysis ---
+    t_start_gemini = time.perf_counter()
     character_info = image_analyzer.get_info_from_screenshot(image_path)
+    t_end_gemini = time.perf_counter()
+    gemini_duration = t_end_gemini - t_start_gemini
+    print(f"  [Time] Gemini Analysis (Total): {gemini_duration:.3f} seconds")
+
+    synthesis_triggered = False
+    tts_duration = 0.0
+    select_duration = 0.0
 
     if character_info:
         char_name = character_info.get("character_name", "Unknown")
@@ -58,24 +70,33 @@ def run_analysis_pipeline(image_path: str, voice_selector_instance: voice_select
         print(f"Dialogue: '{dialogue}'")
         print("---------------------------\n")
 
-        # Get Voice ID (Local Logic)
+        # --- 2. Voice Selection ---
+        t_start_select = time.perf_counter()
         selected_voice_id = voice_selector_instance.find_or_assign_voice(char_name, gender)
+        t_end_select = time.perf_counter()
+        select_duration = t_end_select - t_start_select
+        print(f"  [Time] Voice Selection: {select_duration:.4f} seconds") # Higher precision for fast ops
 
-        # Speak Dialogue
+        # --- 3. TTS Synthesis + Playback ---
         if dialogue:
             if selected_voice_id:
-                print(f"Attempting to speak dialogue using voice ID: {selected_voice_id}")
+                synthesis_triggered = True
+                print(f"[Pipeline] Starting TTS Synthesis + Playback (Voice ID: {selected_voice_id})...")
+                t_start_tts = time.perf_counter()
                 success = synthesize_speech(
                     text=dialogue,
                     voice_id=selected_voice_id,
-                    output_filename=None # Don't save file in interactive mode by default
+                    output_filename=None # Don't save file in interactive mode
                 )
+                t_end_tts = time.perf_counter()
+                tts_duration = t_end_tts - t_start_tts
+                print(f"  [Time] TTS Synthesis + Playback (Total): {tts_duration:.3f} seconds")
                 if not success:
-                    print("Failed to synthesize or play audio.")
+                    print("[Pipeline] Failed to synthesize or play audio.")
             else:
-                print("Error: Could not determine a voice ID (including fallback). Cannot speak dialogue.")
+                print("[Pipeline] Error: Could not determine a voice ID. Cannot speak dialogue.")
         else:
-            print("No dialogue found in the screenshot to speak.")
+            print("[Pipeline] No dialogue found to speak.")
 
         # Save Mapping if Updated
         voice_selector_instance.save_map()
@@ -83,7 +104,24 @@ def run_analysis_pipeline(image_path: str, voice_selector_instance: voice_select
     else:
         print("Failed to get character information from the screenshot.")
 
+    pipeline_end_time = time.perf_counter()
+    total_pipeline_duration = pipeline_end_time - pipeline_start_time
+    total_roundtrip = pipeline_end_time - trigger_time # Time since key press
+
     print("-" * 30)
+    print("[Timing Summary]")
+    print(f"  - Gemini Analysis:       {gemini_duration:.3f} s")
+    if character_info: # Only print these if analysis succeeded
+      print(f"  - Voice Selection:       {select_duration:.4f} s")
+      if synthesis_triggered:
+          print(f"  - TTS + Playback:      {tts_duration:.3f} s")
+      else:
+          print(f"  - TTS + Playback:      N/A")
+    print(f"  - Pipeline Execution:    {total_pipeline_duration:.3f} s")
+    print(f"  - Total Roundtrip Time:  {total_roundtrip:.3f} s")
+    print("-" * 30)
+
+
     print(f"\nReady. Press '{config.TRIGGER_KEY}' to capture and process, 'ESC' to exit.")
     is_processing = False # Reset processing flag
 
@@ -94,6 +132,8 @@ def capture_and_process(vs_instance: voice_selector.VoiceSelector):
     Captures a screenshot, saves it temporarily, and triggers the pipeline.
     """
     global is_processing
+    trigger_time = time.perf_counter() # Record time immediately on trigger
+
     if is_processing:
         print("Already processing a screenshot. Please wait.")
         return
@@ -102,40 +142,39 @@ def capture_and_process(vs_instance: voice_selector.VoiceSelector):
     print(f"\n'{config.TRIGGER_KEY}' detected! Capturing screenshot...")
 
     temp_file = None
+    capture_duration = 0.0
     try:
-        # Capture the primary screen
+        # --- 0. Screenshot Capture/Save ---
+        t_start_capture = time.perf_counter()
         screenshot = ImageGrab.grab()
-
-        # Create a temporary file to save the screenshot
-        # Use a recognizable suffix and keep the file until explicitly deleted
         temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
         screenshot.save(temp_file.name, "PNG")
+        t_end_capture = time.perf_counter()
+        capture_duration = t_end_capture - t_start_capture
         print(f"Screenshot saved temporarily to: {temp_file.name}")
+        print(f"  [Time] Screenshot Capture/Save: {capture_duration:.3f} seconds")
 
-        # Run the analysis pipeline using the temp file path
-        run_analysis_pipeline(temp_file.name, vs_instance)
+        # Run the analysis pipeline using the temp file path, pass trigger time
+        run_analysis_pipeline(temp_file.name, vs_instance, trigger_time)
 
-    except FileNotFoundError:
-        print("Error: Failed to create temporary file.")
-        is_processing = False
-    except OSError as e:
-         print(f"Error capturing or saving screenshot: {e}")
-         print("Ensure necessary permissions or try running as administrator/sudo.")
-         is_processing = False
+    # ... (rest of exception handling) ...
     except Exception as e:
         print(f"An unexpected error occurred during capture/process: {e}")
         is_processing = False # Reset flag on error
     finally:
-        # Clean up the temporary file
+        # --- Cleanup ---
+        t_start_cleanup = time.perf_counter()
         if temp_file:
             try:
-                temp_file.close() # Close the file handle
-                os.unlink(temp_file.name) # Delete the file
-                # print(f"Temporary file {temp_file.name} deleted.")
+                temp_file.close()
+                os.unlink(temp_file.name)
             except Exception as e:
                 print(f"Warning: Failed to delete temporary file {temp_file.name}: {e}")
-                # is_processing should already be False unless error happened before finally
-                if is_processing: is_processing = False
+        t_end_cleanup = time.perf_counter()
+        # print(f"  [Time] Temp File Cleanup: {t_end_cleanup - t_start_cleanup:.4f} seconds") # Optional
+
+        # Ensure processing flag is reset if not already done by run_analysis_pipeline
+        if is_processing: is_processing = False
 
 
 # --- Exit Function ---
