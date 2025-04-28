@@ -141,6 +141,9 @@ To change the Text-to-Speech service used (e.g., from ElevenLabs to Google TTS):
 *   `character_voices.json`: Stores the mapping between character names (lowercase) and their assigned TTS voice IDs (created/updated by `main_orchestrator.py` via `voice_selector.py`).
 *   `scripts/`: Directory for utility scripts.
     *   `fetch_voices.py`: Script to fetch voices from the configured TTS provider.
+    *   `data/`: Directory containing data files.
+    *   `voices.json`: Stores the list of available voices fetched from the configured TTS provider (created/updated by `fetch_voices.py` inside the `data/` directory).
+    *   `character_voices.json`: Stores the mapping between character names (lowercase) and their assigned TTS voice IDs (created/updated by `main_orchestrator.py` via `voice_selector.py` inside the `data/` directory).
 
 ## Potential Improvements
 

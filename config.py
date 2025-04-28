@@ -8,7 +8,7 @@ load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     raise ValueError("GOOGLE_API_KEY not found in .env file or environment variables.")
-GEMINI_MODEL = 'gemini-1.5-flash' # Updated model name
+GEMINI_MODEL = 'gemini-2.0-flash' # Updated model name
 print(f"Using Gemini model: {GEMINI_MODEL}")
 
 
@@ -32,10 +32,24 @@ if TTS_PROVIDER == "elevenlabs" and not ELEVENLABS_API_KEY:
 GOOGLE_TTS_LANGUAGE_CODE = "en-US" # Default language
 GOOGLE_TTS_AUDIO_ENCODING = "MP3" # MP3 or LINEAR16
 
+
+# Load the voice name filter(s) from .env (default to empty list = no filter)
+_raw_filter_str = os.getenv("GOOGLE_VOICE_FILTER", "").strip()
+# Split by comma, strip whitespace from each part, convert to lower, and remove empty strings
+GOOGLE_VOICE_FILTERS = [f.strip().lower() for f in _raw_filter_str.split(',') if f.strip()] # <-- PROCESS INTO A LIST
+
+if GOOGLE_VOICE_FILTERS:                                                # <-- CHECK IF LIST IS NOT EMPTY
+    print(f"Applying Google TTS voice name filters: {GOOGLE_VOICE_FILTERS}") # <-- SHOW THE LIST
+else:
+    print("No Google TTS voice name filter applied.")
+
+
+
 # --- File Paths ---
-DATA_DIR = os.path.dirname(os.path.abspath(__file__)) # Assumes data files are in the same dir
-VOICES_PATH = os.path.join(DATA_DIR, "voices.json")
-MAPPING_PATH = os.path.join(DATA_DIR, "character_voices.json")
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__)) # Get the directory where config.py lives
+DATA_DIR = os.path.join(PROJECT_ROOT, "data") # Define the data subfolder path <--- CHANGE HERE
+VOICES_PATH = os.path.join(DATA_DIR, "voices.json") # Will now point inside 'data/'
+MAPPING_PATH = os.path.join(DATA_DIR, "character_voices.json") # Will now point inside 'data/'
 
 # --- Fallback Voice ---
 DEFAULT_FALLBACK_VOICE_ID = os.getenv("DEFAULT_FALLBACK_VOICE_ID")
