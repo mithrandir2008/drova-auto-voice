@@ -3,6 +3,7 @@ import google.generativeai as genai
 from PIL import Image
 import json
 import re
+import traceback # Import traceback for better error details
 
 # Local imports
 import config
@@ -43,7 +44,10 @@ def resize_image(img: Image.Image, max_height: int) -> Image.Image:
 
 
 def get_info_from_screenshot(image_path: str) -> dict | None:
-    """Uploads screenshot to Gemini, returns extracted JSON data."""
+    """
+    Uploads screenshot to Gemini, returns extracted JSON data including
+    dialogue and persona instructions.
+    """
     print(f"\nProcessing image: {image_path}")
     try:
         original_img = Image.open(image_path)
@@ -136,6 +140,10 @@ def get_info_from_screenshot(image_path: str) -> dict | None:
             # Standardize Dialogue (ensure string, strip whitespace)
             dialogue = str(data.get("dialogue", "")).strip()
             data["dialogue"] = dialogue
+
+            # Standardize Persona Instructions (ensure string, strip whitespace)
+            persona = str(data.get("persona_instructions", "")).strip()
+            data["persona_instructions"] = persona
 
             # --- Return Validated Data ---
             return data

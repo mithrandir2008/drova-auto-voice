@@ -8,6 +8,10 @@ load_dotenv()
 TRIGGER_KEY = "`" # Tilde key (often above Tab)
 EXIT_KEY = "esc" # Escape key
 
+# --- Game Context ---
+# Describe the overall setting for Gemini to understand the characters better.
+GAME_CONTEXT = os.getenv("GAME_CONTEXT", "A medieval fantasy RPG, with some dark fantasy elements.")
+print(f"Game Context for Persona Generation: {GAME_CONTEXT}")
 
 # --- Gemini Configuration ---
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -119,34 +123,62 @@ MAX_IMAGE_HEIGHT = 480 # Consider making this configurable via .env if needed
 # Choose one of the prompts below by uncommenting it.
 # Make sure only ONE prompt is active.
 
-# Option 1: Simple Punctuation Enhancement (Default)
-SYSTEM_PROMPT = """
-Analyze the character prominently featured in the screenshot provided.
-Identify the character's name and gender (Male/Female/Unknown).
-Extract the dialogue they are speaking (look for speech bubbles or text directly attributed to them).
+# Persona Generation Prompt (Default)
+SYSTEM_PROMPT = f"""
+Analyze the character prominently featured in the screenshot provided, considering the overall game context: **{GAME_CONTEXT}**
 
-**Rewrite the extracted dialogue to sound more natural for text-to-speech, focusing on pacing and flow.**
-Use punctuation strategically:
-- Periods (.) for sentence endings and clear pauses.
-- Commas (,) for shorter pauses within sentences (e.g., separating clauses, list items).
-- Ellipses (...) for hesitations, trailing thoughts, or more significant pauses.
-- Hyphens (-) *occasionally* for abrupt breaks or slight pauses, if appropriate.
-- Aim for conversational phrasing where fitting. Break down long sentences if needed.
-- Do NOT just return the raw text. Enhance it with punctuation for better TTS delivery.
-- If no dialogue is visible, return an empty string for 'dialogue'.
+1.  Identify the character's name and gender (Male/Female/Unknown).
+2.  Extract the exact dialogue they are currently speaking (look for speech bubbles, etc.). If none, use empty string.
+3.  **Generate a detailed persona description suitable for guiding an OpenAI text-to-speech voice.** Base this on the character's visual appearance, their current expression/action (if any), and the general game context provided above. The persona should be relatively stable for the character. Use the following structure within a single string value:
+    *   Personality/affect: [Describe their general demeanor, e.g., gruff warrior, cheerful shopkeeper, nervous mage]
+    *   Voice: [Describe vocal quality, e.g., deep and resonant, slightly high-pitched and excited, calm and measured]
+    *   Tone: [Describe typical emotional tone, e.g., Authoritative, friendly and welcoming, anxious, sarcastic]
+    *   Dialect/Accent: [Suggest an accent if appropriate, e.g., Standard American, British RP, fantasy dwarven accent, or 'neutral' if none obvious]
+    *   Pronunciation: [Note any quirks if obvious, e.g., Precise and clear, slightly slurred, clipped]
+    *   Features: [Mention characteristic speech patterns, e.g., Uses formal language, often sighs, speaks in short sentences, uses fantasy slang]
+    If a clear persona cannot be determined from the image, provide a generic description based on the gender or role if possible, or leave the persona instructions field empty.
 
 Return ONLY a valid JSON object with the following structure:
-{
+{{
   "character_name": "<Character's Name or Unknown>",
   "gender": "<Male/Female/Unknown>",
-  "dialogue": "<The REWRITTEN dialogue using punctuation for natural flow>"
-}
+  "dialogue": "<The character's exact current spoken words, or empty string>",
+  "persona_instructions": "<The detailed persona description string generated above, or empty string>"
+}}
 
 Do not include any explanatory text before or after the JSON object.
-Ensure the 'dialogue' field contains the rewritten plain text or an empty string.
+Ensure the 'dialogue' field contains the exact text seen.
+Ensure the 'persona_instructions' field contains the multi-line description as a single string, or is empty.
 """
 
-# Option 2: Basic SSML Enhancement (Use if TTS provider supports SSML well, e.g., Google)
+# # Option 1: Simple Punctuation Enhancement (Default)
+# SYSTEM_PROMPT = """
+# Analyze the character prominently featured in the screenshot provided.
+# Identify the character's name and gender (Male/Female/Unknown).
+# Extract the dialogue they are speaking (look for speech bubbles or text directly attributed to them).
+
+# **Rewrite the extracted dialogue to sound more natural for text-to-speech, focusing on pacing and flow.**
+# Use punctuation strategically:
+# - Periods (.) for sentence endings and clear pauses.
+# - Commas (,) for shorter pauses within sentences (e.g., separating clauses, list items).
+# - Ellipses (...) for hesitations, trailing thoughts, or more significant pauses.
+# - Hyphens (-) *occasionally* for abrupt breaks or slight pauses, if appropriate.
+# - Aim for conversational phrasing where fitting. Break down long sentences if needed.
+# - Do NOT just return the raw text. Enhance it with punctuation for better TTS delivery.
+# - If no dialogue is visible, return an empty string for 'dialogue'.
+
+# Return ONLY a valid JSON object with the following structure:
+# {
+#   "character_name": "<Character's Name or Unknown>",
+#   "gender": "<Male/Female/Unknown>",
+#   "dialogue": "<The REWRITTEN dialogue using punctuation for natural flow>"
+# }
+
+# Do not include any explanatory text before or after the JSON object.
+# Ensure the 'dialogue' field contains the rewritten plain text or an empty string.
+# """
+
+# Option 2: Basic SSML Enhancement (Use if TTS provider supports SSML well,but unfortnuately google chirp3 does not :( )
 # SYSTEM_PROMPT = """
 # Analyze the character prominently featured in the screenshot provided.
 # Identify the character's name, gender (Male/Female/Unknown).

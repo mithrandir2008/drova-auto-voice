@@ -29,17 +29,22 @@ else:
 
 # --- Standardized Functions ---
 
-def synthesize(text: str, voice_id: str, output_filename: str | None = None) -> bool:
+def synthesize(
+    text: str,
+    voice_id: str,
+    output_filename: str | None = None,
+    instructions: str | None = None # <<< ADDED INSTRUCTIONS PARAMETER
+    ) -> bool:
     """
-    Synthesizes plain text using OpenAI TTS. Plays audio using sounddevice's
-    OutputStream for smooth playback after API call completion.
-    Optionally saves the audio.
+    Synthesizes plain text using OpenAI TTS, optionally using persona instructions.
+    Plays audio using sounddevice or saves the audio.
     Returns True on success, False on failure.
 
     Args:
         text: The text to synthesize.
         voice_id: The OpenAI voice to use (e.g., 'alloy', 'echo', 'nova').
         output_filename: Path to save the audio file. If None, audio is only played.
+        instructions: Optional detailed persona instructions for the TTS voice.
     """
     if not OPENAI_API_KEY:
         print("Error: OpenAI API Key not configured. Cannot synthesize.")
@@ -50,37 +55,44 @@ def synthesize(text: str, voice_id: str, output_filename: str | None = None) -> 
     if not voice_id:
         print("Error: No OpenAI TTS Voice ID provided.")
         return False
+    # Validate voice_id (optional but good practice)
     if voice_id not in ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']:
-        print(f"Warning: Unknown OpenAI voice_id '{voice_id}'. Using 'alloy' as default.")
-        voice_id = 'alloy' # Or handle as error if preferred
+        print(f"Warning: Unknown OpenAI voice_id '{voice_id}'. Known voices: alloy, echo, fable, onyx, nova, shimmer. Using 'alloy' as default.")
+        voice_id = 'alloy'
 
     print(f"\nSending dialogue text to OpenAI TTS using Voice ID {voice_id}: '{text}'")
+    # Print snippet of instructions if provided
+    if instructions:
+        instr_snippet = (instructions[:70] + '...') if len(instructions) > 70 else instructions
+        print(f"  -> Using Persona Instructions: '{instr_snippet}'")
+
 
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json",
     }
 
-    # Prefer WAV for direct playback if libs are available, easier decoding.
-    # Otherwise use MP3 or format from config. OpenAI default is mp3.
-    # WAV or PCM might be necessary for precise sample rate control if needed,
-    # but soundfile can handle mp3, flac etc. Let's try WAV for playback.
-    response_format = "wav" if SOUND_LIBS_AVAILABLE else getattr(config, 'OPENAI_TTS_OUTPUT_FORMAT', 'mp3')
+    # Determine response format (prefer wav for playback, fallback to config/mp3)
+    response_format = "wav" if SOUND_LIBS_AVAILABLE else getattr(config, 'OPENAI_TTS_DEFAULT_FORMAT', 'mp3')
 
+    # Build the API payload
     payload = {
-        "model": getattr(config, 'OPENAI_TTS_MODEL', 'tts-1'), # Default to tts-1 if not in config
+        "model": getattr(config, 'OPENAI_TTS_MODEL', 'tts-1'),
         "input": text,
         "voice": voice_id,
         "response_format": response_format,
-        # "speed": 1.0 # Optional speed control (0.25 to 4.0)
+        # "speed": 1.0 # Optional speed control (0.25 to 4.0) can be added here if needed
     }
 
-    # Note: OpenAI's sample rate is fixed based on model/format (often 24kHz).
-    # config.TARGET_SAMPLE_RATE is not directly sent, but used for comparison/info.
-    target_sample_rate = getattr(config, 'TARGET_SAMPLE_RATE', 24000) # Default to 24k if not set
+    # <<< ADD INSTRUCTIONS TO PAYLOAD IF PROVIDED AND NOT EMPTY >>>
+    if instructions and instructions.strip():
+        payload["instructions"] = instructions.strip() # Use stripped instructions
 
+    # Get target sample rate from config mainly for info/comparison
+    target_sample_rate = getattr(config, 'TARGET_SAMPLE_RATE', 24000)
 
     try:
+        # --- API Call ---
         t_tts_api_start = time.perf_counter()
         print(f"    [TTS] Requesting synthesis from OpenAI API (Model: {payload['model']}, Format: {response_format})...")
         response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
@@ -89,10 +101,9 @@ def synthesize(text: str, voice_id: str, output_filename: str | None = None) -> 
         print(f"    [Time] OpenAI TTS API Call Duration: {api_duration:.3f} seconds")
 
         response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
-
         audio_content = response.content
 
-        # --- Streaming Playback Implementation ---
+        # --- Playback Implementation ---
         played_successfully = False
         playback_duration = 0.0
         if SOUND_LIBS_AVAILABLE and audio_content:
@@ -103,8 +114,7 @@ def synthesize(text: str, voice_id: str, output_filename: str | None = None) -> 
             stream = None # Define stream variable outside try
 
             try:
-                # Use soundfile to read the audio data (handles various formats like wav, mp3, flac)
-                # Read directly into float32 format, which is widely supported by sounddevice
+                # Use soundfile to read the audio data into float32
                 print(f"    [TTS] Decoding audio format ({response_format}) into float32...")
                 temp_audio_data, samplerate = sf.read(io.BytesIO(audio_content), dtype='float32')
 
@@ -112,102 +122,75 @@ def synthesize(text: str, voice_id: str, output_filename: str | None = None) -> 
                 audio_data = temp_audio_data.copy()
 
                 if samplerate != target_sample_rate:
-                     print(f"    [Info] Actual audio samplerate ({samplerate} Hz) differs from target ({target_sample_rate} Hz). Using actual rate for playback.")
-
-                # Optional: Check if the copy is writeable (for debugging)
-                # print(f"    [Debug] Audio data is writeable: {audio_data.flags.writeable}")
+                     print(f"    [Info] Actual audio samplerate ({samplerate} Hz) differs from config target ({target_sample_rate} Hz). Using actual rate for playback.")
 
                 if audio_data is None or len(audio_data) == 0:
                      print("Error: Failed to decode audio data for playback.")
                      raise ValueError("Empty or undecodable audio data")
 
-                # ---> ADD FADE-IN (Operates on the writeable copy) <---
-                fade_duration_ms = 5  # Adjust fade duration
+                # ---> ADD FADE-IN (Operates on the writeable float32 copy) <---
+                fade_duration_ms = 5
                 fade_samples = int(samplerate * (fade_duration_ms / 1000.0))
                 fade_samples = min(fade_samples, len(audio_data))
 
                 if fade_samples > 0:
-                    print(f"Applying {fade_duration_ms}ms fade-in ({fade_samples} samples)...")
+                    # print(f"Applying {fade_duration_ms}ms fade-in ({fade_samples} samples)...") # Less verbose
                     fade_curve = np.linspace(0.0, 1.0, fade_samples, dtype=audio_data.dtype)**2 # Quadratic
 
-                    # Apply the fade using in-place multiplication
                     if audio_data.ndim == 1: # Mono
                         audio_data[:fade_samples] *= fade_curve
                     elif audio_data.ndim > 1: # Stereo or more channels
                         audio_data[:fade_samples, :] *= fade_curve[:, np.newaxis]
-                    else:
-                         print("Warning: audio_data has unexpected dimensions for fade-in.")
                 # ---> END FADE-IN <---
 
                 channels = audio_data.shape[1] if audio_data.ndim > 1 else 1
                 print(f"    [TTS] Starting streaming playback ({samplerate} Hz, {channels} ch, dtype: {audio_data.dtype})...")
 
-                # --- Identical audio_callback function from tts_google.py ---
+                # Define the audio callback function (identical to previous versions)
                 def audio_callback(outdata, frames, time_info, status):
                     """Callback function for sounddevice stream."""
                     nonlocal current_frame
                     if status:
                         print(f"    [TTS Playback Status] {status}")
-
                     try:
                         chunk_size = min(len(audio_data) - current_frame, frames)
                         if chunk_size <= 0:
-                            # print("    [TTS Playback] Reached end of data (chunk_size <= 0).") # Debug
-                            outdata[:] = 0 # Fill buffer with silence
+                            outdata[:] = 0
                             if not playback_finished_event.is_set(): playback_finished_event.set()
                             raise sd.CallbackStop
-
                         chunk = audio_data[current_frame : current_frame + chunk_size]
-
-                        # --- Shape Handling Logic ---
-                        outdata_channels = outdata.shape[1] # Channels expected by the output buffer
-
-                        # Fill the valid part of the buffer first
-                        if channels == 1 and outdata_channels == 1:
-                            outdata[:chunk_size, 0] = chunk
-                        elif channels == 1 and outdata_channels > 1:
-                            outdata[:chunk_size, :] = chunk.reshape(-1, 1)
-                        elif channels > 1 and outdata_channels == 1:
-                            outdata[:chunk_size, 0] = chunk.mean(axis=1)
-                        elif channels == outdata_channels:
-                            outdata[:chunk_size] = chunk
-                        else: # Mismatched channels
-                            print(f"    [Warning] Mismatched audio channels. Source: {channels}, Output: {outdata_channels}. Attempting mix/tile.")
-                            if outdata_channels > channels:
-                                outdata[:chunk_size, :channels] = chunk
-                                outdata[:chunk_size, channels:] = 0
-                            else:
-                                outdata[:chunk_size, :] = chunk[:,:outdata_channels]
-
-                        # Fill remaining buffer with silence if chunk was smaller than frames
+                        # Shape Handling Logic
+                        outdata_channels = outdata.shape[1]
+                        if channels == 1 and outdata_channels == 1: outdata[:chunk_size, 0] = chunk
+                        elif channels == 1 and outdata_channels > 1: outdata[:chunk_size, :] = chunk.reshape(-1, 1)
+                        elif channels > 1 and outdata_channels == 1: outdata[:chunk_size, 0] = chunk.mean(axis=1)
+                        elif channels == outdata_channels: outdata[:chunk_size] = chunk
+                        else: # Mismatched channels fallback
+                             print(f"    [Warning] Mismatched audio channels. Source: {channels}, Output: {outdata_channels}. Attempting mix/tile.")
+                             if outdata_channels > channels:
+                                 outdata[:chunk_size, :channels] = chunk; outdata[:chunk_size, channels:] = 0
+                             else: outdata[:chunk_size, :] = chunk[:,:outdata_channels]
+                        # Fill remaining buffer with silence if necessary
                         if chunk_size < frames:
                             outdata[chunk_size:] = 0
-                            # Signal end only when the last actual data is sent
                             if current_frame + chunk_size >= len(audio_data):
-                                # print("    [TTS Playback] Reached end of data (chunk_size < frames).") # Debug
                                 if not playback_finished_event.is_set(): playback_finished_event.set()
                                 raise sd.CallbackStop
-
                         current_frame += chunk_size
-                        # --- End Shape Handling ---
-
                     except Exception as cb_e:
                         print(f"    [Error in audio_callback] {type(cb_e).__name__}: {cb_e}")
-                        traceback.print_exc()
-                        outdata[:] = 0 # Silence on error
+                        traceback.print_exc(); outdata[:] = 0
                         if not playback_finished_event.is_set(): playback_finished_event.set()
-                        raise sd.CallbackStop # Stop the stream
+                        raise sd.CallbackStop
 
                 t_playback_start = time.perf_counter()
 
-                # Create and start the stream
+                # Create and start the audio stream
                 try:
                     device_info = sd.query_devices(kind='output')
                     output_channels = device_info.get('max_output_channels', channels)
-                    if output_channels <= 0:
-                        print(f"    [Warning] Device query returned invalid channels ({output_channels}). Defaulting to source channels ({channels}).")
-                        output_channels = channels
-                    print(f"    [SoundDevice] Using output device: {sd.query_devices(kind='output')['name']} with {output_channels} channels.")
+                    if output_channels <= 0: output_channels = channels # Safety check
+                    # print(f"    [SoundDevice] Using output device: {sd.query_devices(kind='output')['name']} with {output_channels} channels.") # Less verbose
                 except Exception as dev_e:
                     print(f"    [Warning] Failed to query output device info: {dev_e}. Defaulting to source channels ({channels}).")
                     output_channels = channels
@@ -215,11 +198,11 @@ def synthesize(text: str, voice_id: str, output_filename: str | None = None) -> 
                 stream = sd.OutputStream(
                     samplerate=samplerate,
                     channels=output_channels,
-                    dtype=audio_data.dtype, # Use dtype from loaded data
+                    dtype=audio_data.dtype, # Should be float32
                     callback=audio_callback)
                 with stream:
-                     # Timeout slightly longer than expected audio duration
-                    timeout_seconds = (len(audio_data) / samplerate) + 5.0
+                    # Wait for playback completion with a timeout
+                    timeout_seconds = (len(audio_data) / samplerate) + 10.0 # Generous timeout
                     if not playback_finished_event.wait(timeout=timeout_seconds):
                          print(f"    [Warning] Playback finished event timed out after {timeout_seconds:.1f}s. Stream might not have completed naturally.")
                          if stream.active:
@@ -240,16 +223,15 @@ def synthesize(text: str, voice_id: str, output_filename: str | None = None) -> 
                 print(f"Error during streaming playback setup or execution: {type(e).__name__}: {e}")
                 traceback.print_exc()
                 if stream is not None and stream.active:
-                    try:
-                        stream.stop()
-                        stream.close()
-                    except Exception as close_e:
-                         print(f"    Error stopping/closing audio stream on error: {close_e}")
+                    try: stream.stop(); stream.close()
+                    except Exception as close_e: print(f"    Error stopping/closing audio stream on error: {close_e}")
                 if not playback_finished_event.is_set(): playback_finished_event.set()
             finally:
+                 # Ensure main thread never blocks indefinitely if error occurred before wait
                  if not playback_finished_event.is_set():
-                      playback_finished_event.set() # Ensure main thread never blocks indefinitely
+                      playback_finished_event.set()
 
+        # --- End Playback ---
 
         elif not SOUND_LIBS_AVAILABLE:
             print("Audio playback skipped (sounddevice/soundfile not available).")
@@ -261,7 +243,6 @@ def synthesize(text: str, voice_id: str, output_filename: str | None = None) -> 
         if output_filename:
             if audio_content:
                 try:
-                    # Save the original audio_content bytes received from API
                     output_dir = os.path.dirname(output_filename)
                     if output_dir and not os.path.exists(output_dir):
                          os.makedirs(output_dir, exist_ok=True)
@@ -276,25 +257,32 @@ def synthesize(text: str, voice_id: str, output_filename: str | None = None) -> 
             else:
                  print("Skipping save: No audio data received from API.")
         else:
+             # If no output filename, success depends on playback (if libs avail) or just getting data
              saved_successfully = played_successfully or (not SOUND_LIBS_AVAILABLE and bool(audio_content))
 
+        # --- Return Status ---
         # Return True if we got audio data AND (it was saved OR (it was played successfully AND no save was requested))
         return bool(audio_content) and (saved_successfully or (played_successfully and not output_filename))
 
+    # --- Error Handling for API Call ---
     except requests.exceptions.RequestException as e:
         print(f"Error during OpenAI TTS API request: {e}")
         if e.response is not None:
             print(f"    Status Code: {e.response.status_code}")
             try:
-                print(f"    Response Body: {e.response.json()}") # Show error details from OpenAI
+                # Attempt to print JSON error details from OpenAI
+                error_details = e.response.json()
+                print(f"    Response Body: {error_details}")
             except requests.exceptions.JSONDecodeError:
-                print(f"    Response Body: {e.response.text}") # Show raw text if not JSON
+                # Fallback to raw text if response isn't JSON
+                print(f"    Response Body (non-JSON): {e.response.text}")
         traceback.print_exc()
         return False
     except Exception as e:
-        print(f"An unexpected error occurred: {type(e).__name__}: {e}")
+        print(f"An unexpected error occurred in synthesize function: {type(e).__name__}: {e}")
         traceback.print_exc()
         return False
+
 
 def get_voices() -> dict:
     """
