@@ -1,7 +1,11 @@
 import os
 from google.cloud import texttospeech
-import config # Use config for settings
+import config
 import io
+import time
+import numpy as np # Need numpy for audio data manipulation
+import threading # Need threading for event synchronization
+import traceback # For detailed error printing
 
 # Optional: For audio playback directly (requires sounddevice, soundfile)
 try:
@@ -26,8 +30,9 @@ except Exception as e:
 
 def synthesize(text: str, voice_id: str, output_filename: str | None = None) -> bool:
     """
-    Synthesizes text using Google TTS and plays or saves the audio.
-    Dynamically determines language code from the voice_id.
+    Synthesizes plain text using Google TTS. Plays audio using sounddevice's
+    OutputStream for smooth playback after API call completion.
+    Optionally saves the audio.
     Returns True on success, False on failure.
     """
     if not google_client:
@@ -40,113 +45,272 @@ def synthesize(text: str, voice_id: str, output_filename: str | None = None) -> 
         print("Error: No Google TTS Voice Name (ID) provided.")
         return False
 
-    print(f"\nSending dialogue to Google TTS using Voice Name {voice_id}: '{text}'")
+    print(f"\nSending dialogue text to Google TTS using Voice Name {voice_id}: '{text}'")
 
-    # --- Dynamically determine language code from voice_id ---
-    extracted_language_code = config.GOOGLE_TTS_LANGUAGE_CODE # Default fallback
+    extracted_language_code = config.GOOGLE_TTS_LANGUAGE_CODE
     try:
+        # Attempt to parse language code from voice ID (e.g., "en-US-Wavenet-D")
         parts = voice_id.split('-')
         if len(parts) >= 2:
-            # Assume format like 'en-US-Wavenet-A' or 'en-AU-Chirp...'
-            # Combine the first two parts for the language code (e.g., 'en-US', 'en-AU')
-            # Google uses BCP-47 tags, so 'en-US' or 'en-AU' is correct.
             parsed_code = f"{parts[0]}-{parts[1]}"
-            # Basic validation (e.g., check if it looks like xx-XX) - Can be improved
-            # This check is simplified, assumes 2-letter lang and 2-letter region primarily
+            # Basic validation for xx-XX format
             if len(parsed_code) == 5 and parsed_code[2] == '-' and parsed_code[:2].isalpha() and parsed_code[3:].isalpha():
                  extracted_language_code = parsed_code
-                 # print(f"Extracted language code '{extracted_language_code}' from voice ID.") # Optional debug print
             else:
                  print(f"Warning: Could not reliably parse standard language code format (xx-XX) from start of voice ID '{voice_id}'. Using default '{extracted_language_code}'.")
         else:
-            print(f"Warning: Voice ID '{voice_id}' format unexpected (less than 2 parts after split by '-'). Using default '{extracted_language_code}'.")
+            print(f"Warning: Voice ID '{voice_id}' format unexpected. Using default '{extracted_language_code}'.")
     except Exception as e:
         print(f"Warning: Error parsing language code from voice ID '{voice_id}': {e}. Using default '{extracted_language_code}'.")
-    # --- End of language code extraction ---
 
 
     try:
         synthesis_input = texttospeech.SynthesisInput(text=text)
-
-        # Use voice_id directly as the name parameter
-        # Use the *extracted* language code
         voice = texttospeech.VoiceSelectionParams(
-            language_code=extracted_language_code, # <--- USE EXTRACTED CODE HERE
-            name=voice_id
-        )
+            language_code=extracted_language_code, name=voice_id)
+        target_sample_rate = config.TARGET_SAMPLE_RATE # Or your desired rate
 
-        # --- Select the type of audio file format AND desired sample rate ---
-        target_sample_rate = 44100 # <-- SET YOUR DESIRED RATE HERE (e.g., 44100, 48000)
-        print(f"Requesting audio with sample rate: {target_sample_rate} Hz") # Optional: Log requested rate
+        # Request LINEAR16 if playback libs are available, otherwise use configured encoding
+        requested_encoding = texttospeech.AudioEncoding.LINEAR16 if SOUND_LIBS_AVAILABLE else getattr(texttospeech.AudioEncoding, config.GOOGLE_TTS_AUDIO_ENCODING, texttospeech.AudioEncoding.MP3)
 
-
-        # Select the type of audio file format (MP3 or WAV/LINEAR16)
         audio_config = texttospeech.AudioConfig(
-            audio_encoding=getattr(texttospeech.AudioEncoding, config.GOOGLE_TTS_AUDIO_ENCODING),
-            sample_rate_hertz=target_sample_rate
-            # You could add pitch, speaking_rate here if desired
-            # speaking_rate=1.0,
-            # pitch=0.0
-        )
+            audio_encoding=requested_encoding,
+            sample_rate_hertz=target_sample_rate)
 
+        t_tts_api_start = time.perf_counter()
+        print("    [TTS] Requesting synthesis from Google API...")
         response = google_client.synthesize_speech(
-            input=synthesis_input, voice=voice, audio_config=audio_config
-        )
+            input=synthesis_input, voice=voice, audio_config=audio_config)
+        t_tts_api_end = time.perf_counter()
+        api_duration = t_tts_api_end - t_tts_api_start
+        print(f"    [Time] Google TTS API Call Duration: {api_duration:.3f} seconds")
 
-        # --- Handle Audio Output ---
         audio_content = response.audio_content
-        print("Audio received from Google TTS.")
 
-        # Playback (Optional, requires sounddevice/soundfile)
+        # --- Streaming Playback Implementation ---
         played_successfully = False
-        if SOUND_LIBS_AVAILABLE:
+        playback_duration = 0.0
+        if SOUND_LIBS_AVAILABLE and audio_content:
+            playback_finished_event = threading.Event()
+            current_frame = 0
+            audio_data = None
+            samplerate = 0
+            stream = None # Define stream variable outside try
+
             try:
-                # Use soundfile to read the audio data from memory
-                # Need to wrap the bytes in a BytesIO object
-                audio_data, samplerate = sf.read(io.BytesIO(audio_content))
-                print(f"Playing audio ({samplerate} Hz)...")
-                sd.play(audio_data, samplerate)
-                sd.wait() # Wait for playback to finish
-                print("Playback finished.")
-                played_successfully = True
+                # Read entire audio data into memory first (as API doesn't stream response)
+                # Check actual encoding received, as API might return something different
+                actual_encoding = audio_config.audio_encoding # Ideally check response if possible, using requested for now
+                # print(f"    [Debug] Requested encoding: {requested_encoding}, Assuming actual: {actual_encoding}") # Optional debug
+
+                if actual_encoding == texttospeech.AudioEncoding.LINEAR16:
+                     # Assuming 16-bit signed integers based on LINEAR16
+                     # Create a temporary read-only view first
+                     temp_audio_data = np.frombuffer(audio_content, dtype=np.int16)
+                     samplerate = audio_config.sample_rate_hertz # Use rate from request
+                     # Create a writeable copy for modifications (like fade-in)
+                     audio_data = temp_audio_data.copy() # <<<--- CREATE WRITEABLE COPY
+                     # Note: Google LINEAR16 is typically mono. If stereo is ever returned, shaping might be needed:
+                     # if audio_data.shape[0] % 2 == 0: # Basic check
+                     #     try: audio_data = audio_data.reshape(-1, 2)
+                     #     except ValueError: pass # Keep as mono if reshape fails
+                else: # Fallback to reading MP3 or other encoded formats using soundfile
+                    print(f"    [TTS] Decoding audio format (assuming non-LINEAR16)...")
+                    # soundfile reads into float format by default unless dtype specified
+                    temp_audio_data, samplerate = sf.read(io.BytesIO(audio_content))
+                    # Create a writeable copy
+                    audio_data = temp_audio_data.copy() # <<<--- CREATE WRITEABLE COPY
+                    # Use the samplerate reported by soundfile
+                    if samplerate != audio_config.sample_rate_hertz:
+                         print(f"    [Warning] Samplerate from decoded file ({samplerate} Hz) differs from requested rate ({audio_config.sample_rate_hertz} Hz). Using decoded rate.")
+
+
+                # Optional: Check if the copy is writeable (for debugging)
+                # print(f"    [Debug] Audio data is writeable: {audio_data.flags.writeable}")
+
+                if audio_data is None or len(audio_data) == 0:
+                     print("Error: Failed to decode audio data for playback.")
+                     raise ValueError("Empty or undecodable audio data") # Prevent proceeding
+
+                # ---> ADD FADE-IN (Operates on the writeable copy) <---
+                fade_duration_ms = 5  # Adjust fade duration (e.g., 3-10 ms)
+                fade_samples = int(samplerate * (fade_duration_ms / 1000.0))
+                fade_samples = min(fade_samples, len(audio_data)) # Ensure fade is not longer than audio
+
+                if fade_samples > 0:
+                    print(f"Applying {fade_duration_ms}ms fade-in ({fade_samples} samples)...")
+                    # Ensure fade_curve has the same dtype as audio_data or can be safely cast
+                    fade_curve = np.linspace(0.0, 1.0, fade_samples, dtype=audio_data.dtype)**2 # Quadratic fade-in
+
+                    # Apply the fade using in-place multiplication
+                    if audio_data.ndim == 1: # Mono
+                        audio_data[:fade_samples] *= fade_curve
+                    elif audio_data.ndim > 1: # Stereo or more channels
+                        # Ensure fade_curve is broadcastable (needs extra dimension)
+                        audio_data[:fade_samples, :] *= fade_curve[:, np.newaxis]
+                    else:
+                         print("Warning: audio_data has unexpected dimensions for fade-in.")
+                # ---> END FADE-IN <---
+
+
+                channels = audio_data.shape[1] if audio_data.ndim > 1 else 1
+                print(f"    [TTS] Starting streaming playback ({samplerate} Hz, {channels} ch, dtype: {audio_data.dtype})...")
+
+                def audio_callback(outdata, frames, time_info, status):
+                    """Callback function for sounddevice stream."""
+                    nonlocal current_frame
+                    if status:
+                        print(f"    [TTS Playback Status] {status}")
+
+                    try:
+                        chunk_size = min(len(audio_data) - current_frame, frames)
+                        if chunk_size <= 0:
+                            print("    [TTS Playback] Reached end of data (chunk_size <= 0).")
+                            outdata[:] = 0 # Fill buffer with silence
+                            playback_finished_event.set()
+                            raise sd.CallbackStop
+
+                        chunk = audio_data[current_frame : current_frame + chunk_size]
+
+                        # --- Shape Handling Logic ---
+                        outdata_channels = outdata.shape[1] # Channels expected by the output buffer
+
+                        # Fill the valid part of the buffer first
+                        if channels == 1 and outdata_channels == 1:
+                            outdata[:chunk_size, 0] = chunk # Assign mono to mono column
+                        elif channels == 1 and outdata_channels > 1:
+                             # Tile mono chunk to multiple output channels
+                             outdata[:chunk_size, :] = chunk.reshape(-1, 1)
+                        elif channels > 1 and outdata_channels == 1:
+                             # Mix down multi-channel chunk to mono output
+                             outdata[:chunk_size, 0] = chunk.mean(axis=1)
+                        elif channels == outdata_channels:
+                             # Direct copy (e.g., stereo->stereo)
+                             outdata[:chunk_size] = chunk
+                        else: # Mismatched channels (more complex case)
+                             print(f"    [Warning] Mismatched audio channels. Source: {channels}, Output: {outdata_channels}. Attempting mix/tile.")
+                             # Simple mix/tile fallback (might not sound ideal)
+                             if outdata_channels > channels: # Tile source to output
+                                 outdata[:chunk_size, :channels] = chunk
+                                 outdata[:chunk_size, channels:] = 0 # Silence extra channels
+                             else: # Mix source down to output
+                                 outdata[:chunk_size, :] = chunk[:,:outdata_channels] # Take first output_channels
+
+                        # Fill remaining buffer with silence if chunk was smaller than frames
+                        if chunk_size < frames:
+                            outdata[chunk_size:] = 0
+                            # Signal end only when the last actual data is sent
+                            if current_frame + chunk_size >= len(audio_data):
+                                print("    [TTS Playback] Reached end of data (chunk_size < frames).")
+                                playback_finished_event.set()
+                                raise sd.CallbackStop
+
+                        current_frame += chunk_size
+                        # --- End Shape Handling ---
+
+                    except Exception as cb_e:
+                        print(f"    [Error in audio_callback] {type(cb_e).__name__}: {cb_e}")
+                        traceback.print_exc()
+                        outdata[:] = 0 # Silence on error
+                        playback_finished_event.set() # Ensure main thread isn't blocked
+                        raise sd.CallbackStop # Stop the stream
+
+                t_playback_start = time.perf_counter()
+
+                # Create and start the stream
+                # Determine output channels based on default device capability if possible
+                try:
+                    device_info = sd.query_devices(kind='output')
+                    # Use device's max channels if available, else match source audio
+                    output_channels = device_info.get('max_output_channels', channels)
+                     # Safety check: don't request 0 channels
+                    if output_channels <= 0:
+                         print(f"    [Warning] Device query returned invalid channels ({output_channels}). Defaulting to source channels ({channels}).")
+                         output_channels = channels
+                    print(f"    [SoundDevice] Using output device: {sd.query_devices(kind='output')['name']} with {output_channels} channels.")
+
+                except Exception as dev_e:
+                    print(f"    [Warning] Failed to query output device info: {dev_e}. Defaulting to source channels ({channels}).")
+                    output_channels = channels # Fallback if device query fails
+
+                stream = sd.OutputStream(
+                    samplerate=samplerate,
+                    channels=output_channels, # Use queried/fallback output channels
+                    dtype=audio_data.dtype, # Use the actual dtype of the loaded data
+                    callback=audio_callback)
+                with stream:
+                    # Wait for the callback to signal completion (or error)
+                    if not playback_finished_event.wait(timeout=len(audio_data)/samplerate + 5.0): # Add timeout buffer
+                         print("    [Warning] Playback finished event timed out. Stream might not have completed naturally.")
+                         # Ensure stream is stopped if timeout occurs
+                         if stream.active:
+                             try: stream.stop()
+                             except Exception as stop_e: print(f"    Error stopping stream on timeout: {stop_e}")
+
+                t_playback_end = time.perf_counter()
+                playback_duration = t_playback_end - t_playback_start
+                # Note: playback_duration measures wall time, not necessarily audio length
+                print(f"    [Time] Audio Playback Duration (Wall Time): {playback_duration:.3f} seconds")
+                played_successfully = playback_finished_event.is_set() # Consider successful if event was set
+
+            except sd.PortAudioError as pae:
+                 print(f"PortAudio Error during playback setup or execution: {pae}")
+                 traceback.print_exc()
+                 if stream is not None: stream.close() # Close on PortAudio error
+                 playback_finished_event.set() # Ensure wait() doesn't block
             except Exception as e:
-                print(f"Error playing Google TTS audio: {e}")
-                print("Audio data may still be saved if an output path is provided.")
-        else:
-            # Only print if playback was expected but libs missing
-            # This check is now done at the top, so just note skipping.
-            # print("Audio playback skipped (libraries not available).")
-            pass
+                print(f"Error during streaming playback setup or execution: {type(e).__name__}: {e}")
+                traceback.print_exc() # Print full traceback
+                if stream is not None and stream.active:
+                    try:
+                        stream.stop()
+                        stream.close() # Ensure stream resources are released on error
+                    except Exception as close_e:
+                         print(f"    Error stopping/closing audio stream on error: {close_e}")
+                playback_finished_event.set() # Ensure wait() doesn't block forever on error
+            finally:
+                 # Ensure event is set if error happened before wait()
+                 if not playback_finished_event.is_set():
+                      playback_finished_event.set()
 
 
-        # Save to file
+        elif not SOUND_LIBS_AVAILABLE:
+            print("Audio playback skipped (sounddevice/soundfile not available).")
+        elif not audio_content:
+             print("Skipping playback: No audio content received from API.")
+
+        # --- Saving ---
         saved_successfully = False
         if output_filename:
-            try:
-                # Ensure directory exists
-                output_dir = os.path.dirname(output_filename)
-                if output_dir: # Check if there is a directory part
-                     os.makedirs(output_dir, exist_ok=True)
-
-                with open(output_filename, "wb") as out:
-                    out.write(audio_content)
-                print(f"Audio saved to: {output_filename}")
-                saved_successfully = True
-            except Exception as e:
-                print(f"Error saving Google TTS audio file '{output_filename}': {e}")
+            if audio_content:
+                try:
+                    # Save the original audio_content bytes received from API
+                    output_dir = os.path.dirname(output_filename)
+                    if output_dir and not os.path.exists(output_dir):
+                         os.makedirs(output_dir, exist_ok=True)
+                         print(f"Created output directory: {output_dir}")
+                    with open(output_filename, "wb") as out:
+                        out.write(audio_content)
+                    print(f"Audio saved to: {output_filename}")
+                    saved_successfully = True
+                except Exception as e:
+                    print(f"Error saving Google TTS audio file '{output_filename}': {e}")
+                    traceback.print_exc()
+            else:
+                 print("Skipping save: No audio data received from API.")
         else:
-            # If no output filename, consider saving successful if playback worked (or if playback libs absent)
-             saved_successfully = played_successfully or not SOUND_LIBS_AVAILABLE
+             # If no output filename, success depends on playback if libs available,
+             # or just getting audio data if libs aren't available.
+             saved_successfully = played_successfully or (not SOUND_LIBS_AVAILABLE and bool(audio_content))
 
 
-        # Return True if either playback or saving (if requested) was successful
-        return saved_successfully or (played_successfully and not output_filename)
+        # Return True if we got audio data AND (it was saved OR (it was played successfully AND no save was requested))
+        return bool(audio_content) and (saved_successfully or (played_successfully and not output_filename))
 
 
     except Exception as e:
-        # This will now catch the 400 error if parsing failed AND default was also wrong,
-        # or any other API/audio handling errors.
-        print(f"Error during Google TTS API call or audio handling: {e}")
+        print(f"Error during Google TTS API call or main audio handling: {type(e).__name__}: {e}")
+        traceback.print_exc()
         return False
 
 def get_voices() -> dict:

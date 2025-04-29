@@ -74,8 +74,19 @@ else:
     print(f"Using fallback voice ID: {DEFAULT_FALLBACK_VOICE_ID}")
 
 
+# --- Audio Settings ---
+try:
+    TARGET_SAMPLE_RATE = int(os.getenv("TARGET_SAMPLE_RATE", "48000")) # Load as int, default 48k
+    if TARGET_SAMPLE_RATE <= 0:
+        print(f"Warning: Invalid TARGET_SAMPLE_RATE ({TARGET_SAMPLE_RATE}). Using default 48000 Hz.")
+        TARGET_SAMPLE_RATE = 48000
+    print(f"Target TTS Sample Rate: {TARGET_SAMPLE_RATE} Hz")
+except ValueError:
+    print(f"Warning: TARGET_SAMPLE_RATE in .env is not a valid integer. Using default 48000 Hz.")
+    TARGET_SAMPLE_RATE = 48000
+
 # --- Image Processing ---
-MAX_IMAGE_HEIGHT = 720
+MAX_IMAGE_HEIGHT = 480
 
 # # --- Gemini Prompt ---
 # SYSTEM_PROMPT = """
