@@ -7,8 +7,8 @@ import traceback
 from typing import Union, Dict, List
 
 # Google Gemini API imports
-import google.generativeai as genai
-from google.generativeai import types # Essential for SpeechConfig, VoiceConfig, etc.
+import google.genai as genai
+from google.genai import types # Essential for SpeechConfig, VoiceConfig, etc.
 
 import config # Use config for API key and settings
 
@@ -110,7 +110,6 @@ def synthesize(
                 ),
             )
         )
-        response.resolve() # Ensure completion
 
         t_tts_api_end = time.perf_counter()
         api_duration = t_tts_api_end - t_tts_api_start

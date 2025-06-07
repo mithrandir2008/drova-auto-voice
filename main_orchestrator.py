@@ -124,12 +124,13 @@ if __name__ == "__main__":
                     "output_filename": args.output
                 }
 
-                # ADDED: Add 'instructions' ONLY if using OpenAI AND a persona exists for this char
-                if config.TTS_PROVIDER == 'openai' and stored_persona:
-                    synthesis_kwargs["instructions"] = stored_persona
-                    print(f"  -> Providing stored OpenAI TTS persona instructions.")
-                elif config.TTS_PROVIDER == 'openai' and not stored_persona:
-                     print(f"  -> No stored persona found for '{char_name}'. Synthesizing with default delivery.")
+                # ADDED: Add 'instructions' ONLY if using OpenAI/gemini AND a persona exists for this char
+                if config.TTS_PROVIDER == 'openai' or config.TTS_PROVIDER == 'gemini-tts':
+                    if stored_persona:
+                        synthesis_kwargs["instructions"] = stored_persona
+                        print(f"  -> Providing stored {config.TTS_PROVIDER} TTS persona instructions.")
+                    else:
+                        print(f"  -> No stored persona found for '{char_name}'. Synthesizing with default delivery.")
 
                 t_start_tts = time.perf_counter()
                 try:
