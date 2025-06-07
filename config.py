@@ -17,13 +17,17 @@ print(f"Game Context for Persona Generation: {GAME_CONTEXT}")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     raise ValueError("GOOGLE_API_KEY not found in .env file or environment variables.")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash") # Use 1.5 Flash as default if not set
-print(f"Using Gemini model: {GEMINI_MODEL}")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash") # Use 2.5 Flash as default for multimodal
+print(f"Using Gemini model for vision: {GEMINI_MODEL}")
+
+# ADDED: New Gemini TTS model variable
+GEMINI_TTS_MODEL = os.getenv("GEMINI_TTS_MODEL", "gemini-2.5-flash-preview-tts")
+print(f"Using Gemini model for TTS: {GEMINI_TTS_MODEL}")
 
 
 # --- TTS Provider Selection ---
 TTS_PROVIDER = os.getenv("TTS_PROVIDER", "elevenlabs").lower()
-VALID_TTS_PROVIDERS = ["elevenlabs", "google", "openai"] # Add openai to valid list
+VALID_TTS_PROVIDERS = ["elevenlabs", "google", "openai", "gemini_tts"] # ADDED "gemini_tts"
 if TTS_PROVIDER not in VALID_TTS_PROVIDERS:
     raise ValueError(f"Invalid TTS_PROVIDER '{TTS_PROVIDER}'. Choose from: {', '.join(VALID_TTS_PROVIDERS)}.")
 print(f"Using TTS Provider: {TTS_PROVIDER}")
@@ -97,6 +101,9 @@ if not DEFAULT_FALLBACK_VOICE_ID:
     elif TTS_PROVIDER == 'openai':
         DEFAULT_FALLBACK_VOICE_ID = "nova" # OpenAI Nova (female example)
         print("Warning: DEFAULT_FALLBACK_VOICE_ID not set in .env, using OpenAI default (nova).")
+    elif TTS_PROVIDER == 'gemini_tts': # ADDED: Gemini TTS fallback
+        DEFAULT_FALLBACK_VOICE_ID = "Kore" # Gemini TTS Kore (female example)
+        print("Warning: DEFAULT_FALLBACK_VOICE_ID not set in .env, using Gemini TTS default (Kore).")
     else:
          # Should not happen due to earlier check, but for completeness
         DEFAULT_FALLBACK_VOICE_ID = "" # No valid fallback

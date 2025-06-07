@@ -20,6 +20,9 @@ try:
     elif config.TTS_PROVIDER == 'openai':
         from tts_openai import get_voices
         print("Fetching hardcoded voices...sadly. Openai doesn't do basic APIs eh?") 
+    elif config.TTS_PROVIDER == 'gemini_tts':
+        from tts_gemini import get_voices
+        print("Fetching hardcoded voices") 
     else:
         raise ImportError(f"TTS Provider '{config.TTS_PROVIDER}' is not supported by fetch script.")
 except ImportError as e:

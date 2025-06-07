@@ -24,6 +24,9 @@ try:
     elif config.TTS_PROVIDER == 'openai':
         from tts_openai import synthesize as synthesize_speech
         print("Using Openai TTS backend.")
+    elif config.TTS_PROVIDER == 'gemini_tts':
+        from tts_gemini import synthesize as synthesize_speech
+        print("Using Openai TTS backend.")
     else:
         raise ImportError(f"TTS Provider '{config.TTS_PROVIDER}' is not supported.")
 except ImportError as e:

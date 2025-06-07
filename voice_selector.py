@@ -1,10 +1,8 @@
-# --- START OF MODIFIED voice_selector.py ---
-
 import os
 import json
 import random
 import time
-from typing import Dict, List, Tuple, Optional # Added Optional and Tuple
+from typing import Dict, List, Tuple, Optional, Union # ADDED Union to import list
 
 # Import the correct TTS module's get_voices function based on config
 try:
@@ -19,6 +17,9 @@ try:
         elif config.TTS_PROVIDER == 'openai':
             from tts_openai import get_voices
             DEFAULT_FALLBACK = config.DEFAULT_FALLBACK_VOICE_ID
+        elif config.TTS_PROVIDER == 'gemini_tts': # ADDED: Gemini TTS provider case
+            from tts_gemini import get_voices
+            DEFAULT_FALLBACK = config.DEFAULT_FALLBACK_VOICE_ID # This will get the "Kore" default if not set in .env
         else:
             print(f"Warning [VoiceSelector]: Unknown TTS_PROVIDER '{config.TTS_PROVIDER}' in config. Cannot load specific voices.")
             get_voices = lambda: {'male': [], 'female': []} # Dummy function
@@ -218,6 +219,3 @@ class VoiceSelector:
 
 
         return assigned_voice_id, new_persona_instructions or ""
-
-
-# --- END OF MODIFIED voice_selector.py ---
