@@ -177,6 +177,8 @@ def synthesize(
                                 if not playback_finished_event.is_set(): playback_finished_event.set()
                                 raise sd.CallbackStop
                         current_frame += chunk_size
+                    except sd.CallbackStop: # Catch CallbackStop specifically
+                        raise # Re-raise it so sounddevice handles it internally    
                     except Exception as cb_e:
                         print(f"    [Error in audio_callback] {type(cb_e).__name__}: {cb_e}")
                         traceback.print_exc(); outdata[:] = 0

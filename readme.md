@@ -13,7 +13,7 @@ This project analyzes a screenshot (e.g., from a game or visual novel) to identi
 
 ## Prerequisites
 
-*   **Python:** Version 3.9 or higher recommended.
+*   **Python:** Version 3.10 or higher REQUIRED; CODE WILL BREAK OTHERWISE. Silly AI Code things 
 *   **pip:** Python package installer (usually included with Python).
 *   **API Keys:**
     *   **Google Gemini API Key:** Obtain from [Google AI Studio](https://aistudio.google.com/app/apikey).
