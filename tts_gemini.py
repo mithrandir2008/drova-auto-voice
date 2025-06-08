@@ -265,7 +265,7 @@ def synthesize(
         
         with stream:
             # ... (stream waiting logic is unchanged)
-            producer_started_streaming_event.wait(timeout=10.0) 
+            producer_started_streaming_event.wait(timeout=20.0) 
             if not producer_started_streaming_event.is_set():
                 print("    [Warning] Producer thread did not start streaming within timeout.")
                 return False

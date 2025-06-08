@@ -1,5 +1,6 @@
 python-dotenv
 google-generativeai
+google-genai
 elevenlabs
 Pillow
 google-cloud-texttospeech # Only strictly needed if using Google TTS
