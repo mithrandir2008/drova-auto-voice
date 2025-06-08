@@ -10,6 +10,11 @@ OPENAI_API_KEY=<YOUR_API_KEY>
 # TTS_PROVIDER="openai"
 TTS_PROVIDER="gemini_tts"
 
+# --- MODEL CONFIGURATION (Optional: Defaults are sensible) ---
+GAME_CONTEXT="A medieval fantasy RPG, with some dark fantasy elements."
+GEMINI_MODEL="gemini-2.5-flash" # Model for vision/persona generation
+GEMINI_TTS_MODEL="gemini-2.5-flash-preview-tts" # Model for Gemini TTS
+OPENAI_TTS_MODEL="gpt-4o-mini-tts" # Model for OpenAI TTS
 
 # --- Google Cloud Specific (Only needed if TTS_PROVIDER='google') ---
 # Use google CLI to do a feredated login; easiest
