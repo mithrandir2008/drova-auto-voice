@@ -140,8 +140,8 @@ SYSTEM_PROMPT = f"""
 Analyze the character prominently featured in the screenshot provided, considering the overall game context: **{GAME_CONTEXT}**
 
 1.  Identify the character's name and gender (Male/Female/Unknown).
-2.  Extract the exact dialogue they are currently speaking (look for speech bubbles, etc.). If none, use empty string.
-3.  **Generate a detailed persona description suitable for guiding an OpenAI text-to-speech voice.** Base this on the character's visual appearance, their current expression/action (if any), and the general game context provided above. The persona should be relatively stable for the character. Use the following structure within a single string value:
+2.  Extract the exact dialogue they are currently speaking (look for speech bubbles, etc.). If the dialog feels like its cut-off or incomplete, retrn empty
+3.  **Generate a detailed persona description suitable for guiding an AI text-to-speech voice.** Base this on the character's visual appearance, their current expression/action (if any), and the general game context provided above. The persona should be relatively stable for the character. Use the following structure within a single string value:
     *   Personality/affect: [Describe their general demeanor, e.g., gruff warrior, cheerful shopkeeper, nervous mage]
     *   Voice: [Describe vocal quality, e.g., deep and resonant, slightly high-pitched and excited, calm and measured]
     *   Tone: [Describe typical emotional tone, e.g., Authoritative, friendly and welcoming, anxious, sarcastic]
@@ -154,12 +154,12 @@ Return ONLY a valid JSON object with the following structure:
 {{
   "character_name": "<Character's Name or Unknown>",
   "gender": "<Male/Female/Unknown>",
-  "dialogue": "<The character's exact current spoken words, or empty string>",
+  "dialogue": "<If sentence is not cut-off, the character's exact current spoken words, or empty string>",
   "persona_instructions": "<The detailed persona description string generated above, or empty string>"
 }}
 
 Do not include any explanatory text before or after the JSON object.
-Ensure the 'dialogue' field contains the exact text seen.
+Ensure the 'dialogue' field contains the exact text seen, and if it feels cut-off then return empty
 Ensure the 'persona_instructions' field contains the multi-line description as a single string, or is empty.
 """
 
@@ -215,4 +215,4 @@ Ensure the 'persona_instructions' field contains the multi-line description as a
 # Do not include any explanatory text before or after the JSON object. Ensure the 'dialogue_ssml' field contains valid XML/SSML within the `<speak>` tags or an empty string.
 # """
 
-print(f"System prompt type configured: {'Simple Punctuation' if 'REWRITTEN dialogue' in SYSTEM_PROMPT else 'SSML Enhancement'}")
+# print(f"System prompt type configured: {'Simple Punctuation' if 'REWRITTEN dialogue' in SYSTEM_PROMPT else 'SSML Enhancement'}")
