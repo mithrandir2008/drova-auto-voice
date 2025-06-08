@@ -99,7 +99,7 @@ def run_analysis_pipeline(image_path: str, voice_selector_instance: voice_select
         t_end_select = time.perf_counter()
         select_duration = t_end_select - t_start_select
         print(f"  [Time] Voice Selection & Persona Store/Retrieve: {select_duration:.4f} seconds")
-    
+
 
         # --- 3. TTS Synthesis + Playback ---
         if dialogue:
@@ -243,7 +243,28 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Listens for a hotkey to capture screen, analyze, and speak dialogue.")
     # Add arguments if needed in the future, e.g., --trigger-key
     # parser.add_argument("--trigger-key", default="`", help="Hotkey to trigger screenshot capture.")
+    # ADDED: Argument to clear cache
+    parser.add_argument(
+        "--clear-cache",
+        action="store_true",
+        help="Clear the cached voice list and character mappings for the currently configured TTS provider before running."
+    )
     args = parser.parse_args()
+
+    # ADDED: Logic to handle cache clearing
+    if args.clear_cache:
+        print(f"--- Clearing cache for provider: {config.TTS_PROVIDER} ---")
+        files_to_clear = [config.VOICES_PATH, config.MAPPING_PATH]
+        for f_path in files_to_clear:
+            if os.path.exists(f_path):
+                try:
+                    os.remove(f_path)
+                    print(f"Successfully deleted: {f_path}")
+                except OSError as e:
+                    print(f"Error deleting file {f_path}: {e}")
+            else:
+                print(f"Cache file not found (already clean): {f_path}")
+        print("--- Cache cleared. Proceeding with execution. ---\n")
 
     # --- Configuration for Hotkeys ---
     # TODO: Move these to config.py if preferred

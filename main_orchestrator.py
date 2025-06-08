@@ -44,7 +44,29 @@ if __name__ == "__main__":
         help="Optional: Save the generated audio to this file path (e.g., output.mp3). Directory will be created if needed.",
         default=None
         )
+    # ADDED: Argument to clear cache
+    parser.add_argument(
+        "--clear-cache",
+        action="store_true",
+        help="Clear the cached voice list and character mappings for the currently configured TTS provider before running."
+    )
     args = parser.parse_args()
+
+    # ADDED: Logic to handle cache clearing
+    if args.clear_cache:
+        print(f"--- Clearing cache for provider: {config.TTS_PROVIDER} ---")
+        files_to_clear = [config.VOICES_PATH, config.MAPPING_PATH]
+        for f_path in files_to_clear:
+            if os.path.exists(f_path):
+                try:
+                    os.remove(f_path)
+                    print(f"Successfully deleted: {f_path}")
+                except OSError as e:
+                    print(f"Error deleting file {f_path}: {e}")
+            else:
+                print(f"Cache file not found (already clean): {f_path}")
+        print("--- Cache cleared. Proceeding with execution. ---\n")
+
 
     # Validate image path early
     if not os.path.exists(args.image_path) or not os.path.isfile(args.image_path):

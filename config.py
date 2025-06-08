@@ -68,7 +68,7 @@ if TTS_PROVIDER == "google":
 
 # --- OpenAI TTS Configuration (Required if TTS_PROVIDER='openai') ---
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_TTS_MODEL = os.getenv("OPENAI_TTS_MODEL", "tts-1") # Default model (e.g., tts-1, tts-1-hd)
+OPENAI_TTS_MODEL = os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts") # Default model (e.g., tts-1, tts-1-hd)
 # Note: OpenAI output format is requested in the API call (wav for playback, mp3 default)
 # This config value could be used as a fallback if needed, but the tts_openai.py script handles it.
 OPENAI_TTS_DEFAULT_FORMAT = os.getenv("OPENAI_TTS_DEFAULT_FORMAT", "mp3").lower() # Default format if saved without playback libs
@@ -85,8 +85,13 @@ elif TTS_PROVIDER == "openai":
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__)) # Get the directory where config.py lives
 DATA_DIR = os.path.join(PROJECT_ROOT, "data") # Define the data subfolder path
 os.makedirs(DATA_DIR, exist_ok=True) # Ensure data directory exists
-VOICES_PATH = os.path.join(DATA_DIR, "voices.json") # Will now point inside 'data/'
-MAPPING_PATH = os.path.join(DATA_DIR, "character_voices.json") # Will now point inside 'data/'
+
+# MODIFIED: File paths are now provider-specific to avoid conflicts.
+VOICES_PATH = os.path.join(DATA_DIR, f"{TTS_PROVIDER}_voices.json")
+MAPPING_PATH = os.path.join(DATA_DIR, f"{TTS_PROVIDER}_character_voices.json")
+print(f"Using voices cache path: {VOICES_PATH}")
+print(f"Using character map path: {MAPPING_PATH}")
+
 
 # --- Fallback Voice ---
 DEFAULT_FALLBACK_VOICE_ID = os.getenv("DEFAULT_FALLBACK_VOICE_ID")
@@ -171,7 +176,7 @@ Ensure the 'persona_instructions' field contains the multi-line description as a
 # - Ellipses (...) for hesitations, trailing thoughts, or more significant pauses.
 # - Hyphens (-) *occasionally* for abrupt breaks or slight pauses, if appropriate.
 # - Aim for conversational phrasing where fitting. Break down long sentences if needed.
-# - Do NOT just return the raw text. Enhance it with punctuation for better TTS delivery.
+# - Do NOT justreturn the raw text. Enhance it with punctuation for better TTS delivery.
 # - If no dialogue is visible, return an empty string for 'dialogue'.
 
 # Return ONLY a valid JSON object with the following structure:
