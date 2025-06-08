@@ -55,38 +55,8 @@ The system can be run in two modes: processing a single image file from the comm
 ## Configuration
 
 1.  Create a **`.env`** file in the project's root directory.
-2.  Copy the content below into your `.env` file and fill in your credentials. **You only need to provide keys for the service(s) you intend to use.**
+2.  Feel free to reuse the `.sampleenv` file and fill in your credentials. **You only need to provide keys for the service(s) you intend to use.**
 
-    ```dotenv
-    # --- Service Selection ---
-    # Choose the Text-to-Speech provider: 'elevenlabs' or 'google' or 'openai' or 'gemini_tts'
-    # TTS_PROVIDER="elevenlabs"
-# TTS_PROVIDER="google"
-    # TTS_PROVIDER="openai"
-    TTS_PROVIDER="gemini_tts"
-    
-    # --- API KEYS (ONLY PROVIDE KEYS FOR THE SERVICES YOU USE) ---
-GOOGLE_API_KEY="YOUR_GEMINI_API_KEY_HERE" # REQUIRED FOR IMAGE ANALYSIS & GEMINI TTS
-    OPENAI_API_KEY="YOUR_OPENAI_API_KEY_HERE" # Required if TTS_PROVIDER='openai'
-    ELEVENLABS_API_KEY="YOUR_ELEVENLABS_API_KEY_HERE" # Required if TTS_PROVIDER='elevenlabs'
-    
-    # --- GOOGLE CLOUD TTS CREDENTIALS (Required if TTS_PROVIDER='google') ---
-    # Set this environment variable system-wide OR uncomment and set the path here.
-    # GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/google_cloud_credentials.json"
-    
-    # --- MODEL CONFIGURATION (Optional: Defaults are sensible) ---
-    GAME_CONTEXT="A medieval fantasy RPG, with some dark fantasy elements."
-GEMINI_MODEL="gemini-1.5-flash" # Model for vision/persona generation
-    GEMINI_TTS_MODEL="models/tts-1-hd" # Model for Gemini TTS
-    OPENAI_TTS_MODEL="tts-1-hd" # Model for OpenAI TTS (e.g., tts-1, tts-1-hd)
-    
-    # --- DEFAULT FALLBACK VOICE ID (Optional) ---
-    # Set a fallback voice ID *for your chosen provider*. Examples:
-    # For 'elevenlabs': "JBFqnCBsd6RMkjVDRZzb" (Rachel)
-    # For 'google': "en-US-Standard-A"
-    # For 'openai': "nova"
-    # For 'gemini_tts': "Kore"
-    DEFAULT_FALLBACK_VOICE_ID="nova"
     ```
 
 ## Usage
